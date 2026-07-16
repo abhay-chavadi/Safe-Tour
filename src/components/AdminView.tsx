@@ -1,84 +1,36 @@
+import MapplsMap from "./MapplsMap";
+import { motion } from 'motion/react';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, AlertOctagon, Phone, RefreshCw, MapPin, Camera,
   Trash2, Plus, Database, Link, Lock, Search, HeartPulse, Volume2, VolumeX,
-  ShieldAlert, Radio, CheckCircle2, Cloud, Thermometer, Wind
+  ShieldAlert, Radio, CheckCircle2, Cloud, Thermometer, Wind, Newspaper
 } from 'lucide-react';
-import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
-import { Tourist, GeoFence, BlockchainBlock } from '../types';
+import { Tourist, GeoFence, BlockchainBlock, DisasterNews } from '../types';
+import { IncidentTimeline } from "./IncidentTimeline";
 
 // MapCircle helper for Admin Map circles
-function MapCircle({ center, radius, type }: { center: google.maps.LatLngLiteral; radius: number; type: 'safe' | 'danger' }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!map) return;
-    const circle = new google.maps.Circle({
-      map,
-      center,
-      radius,
-      fillColor: type === 'safe' ? '#10B981' : '#EF4444',
-      fillOpacity: 0.15,
-      strokeColor: type === 'safe' ? '#10B981' : '#EF4444',
-      strokeOpacity: 0.5,
-      strokeWeight: 1.5,
-    });
-    return () => {
-      circle.setMap(null);
-    };
-  }, [map, center.lat, center.lng, radius, type]);
-  return null;
-}
 
-function PlaceAutocomplete({ onPlaceSelect }: { onPlaceSelect: (place: google.maps.places.PlaceResult) => void }) {
-  const [placeAutocomplete, setPlaceAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const placesLib = useMapsLibrary('places');
 
-  useEffect(() => {
-    if (!placesLib || !inputRef.current) return;
-    
-    // We are using the classic places Autocomplete
-    if (!placesLib.Autocomplete) return;
-    
-    const options = {
-      fields: ['geometry', 'name', 'formatted_address']
-    };
-    
-    setPlaceAutocomplete(new placesLib.Autocomplete(inputRef.current, options));
-  }, [placesLib]);
-
-  useEffect(() => {
-    if (!placeAutocomplete) return;
-
-    const listener = placeAutocomplete.addListener('place_changed', () => {
-      onPlaceSelect(placeAutocomplete.getPlace());
-    });
-
-    return () => {
-      if (listener) listener.remove();
-    };
-  }, [placeAutocomplete, onPlaceSelect]);
-
-  return (
-    <input
-      ref={inputRef}
-      type="text"
-      placeholder="E.g., Elephant Falls"
-      className="flex-1 p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-        }
-      }}
-    />
-  );
-}
 
 export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: string }) {
   const [tourists, setTourists] = useState<Tourist[]>([]);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const [trackedTouristId, setTrackedTouristId] = useState<string | null>(null);
+  const trackedTouristIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    trackedTouristIdRef.current = trackedTouristId;
+  }, [trackedTouristId]);
+
   const [geoFences, setGeoFences] = useState<GeoFence[]>([]);
   const [blockchain, setBlockchain] = useState<BlockchainBlock[]>([]);
-  const [weatherAlert, setWeatherAlert] = useState<{ status: string; code: number; color: string; temperature: number; windspeed: number; containerClass: string; dotClass: string; placeName: string; forecast: { time: string, temp: number, code: number }[] } | null>(null);
+  const [weatherAlert, setWeatherAlert] = useState<{ status: string; code: number; color: string; temperature: number; windspeed: number; containerClass: string; dotClass: string; iconClass: string; placeName: string; forecast: { time: string, temp: number, code: number }[] } | null>(null);
   const [weatherSearchQuery, setWeatherSearchQuery] = useState("");
   const [weatherCoords, setWeatherCoords] = useState({lat: 25.5788, lng: 91.8933, name: "Shillong"});
   
@@ -118,6 +70,15 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Safety Hub News and Advisories states
+  const [safetyNews, setSafetyNews] = useState<DisasterNews[]>([]);
+  const [newNewsTitle, setNewNewsTitle] = useState('');
+  const [newNewsMessage, setNewNewsMessage] = useState('');
+  const [newNewsCategory, setNewNewsCategory] = useState('Weather Warning');
+  const [newNewsSeverity, setNewNewsSeverity] = useState<'info' | 'warning' | 'critical'>('warning');
+  const [isPublishingNews, setIsPublishingNews] = useState(false);
+  const [newsError, setNewsError] = useState('');
+
   // QR Code automatic rotation states
   const [qrNonce, setQrNonce] = useState(Date.now().toString());
   const [qrCountdown, setQrCountdown] = useState(15);
@@ -135,29 +96,54 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
           const code = data.current_weather.weathercode;
           let status = 'Clear / Safe';
           let color = 'emerald';
-          let containerClass = 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400';
-          let dotClass = 'bg-emerald-400';
+          let containerClass = 'bg-emerald-50/95 border-emerald-200 text-emerald-950 shadow-sm';
+          let dotClass = 'bg-emerald-600';
+          let iconClass = 'text-emerald-700';
+
           if (code >= 1 && code <= 3) {
             status = 'Cloudy / Fair';
             color = 'blue';
-            containerClass = 'bg-blue-950/30 border-blue-800/40 text-blue-400';
-            dotClass = 'bg-blue-400';
+            containerClass = 'bg-blue-50/95 border-blue-200 text-blue-950 shadow-sm';
+            dotClass = 'bg-blue-600';
+            iconClass = 'text-blue-700';
           } else if (code >= 51 && code <= 67) {
             status = 'Rain Alert: Wet Trails';
             color = 'amber';
-            containerClass = 'bg-amber-950/30 border-amber-800/40 text-amber-400';
-            dotClass = 'bg-amber-400';
+            containerClass = 'bg-amber-50/95 border-amber-200 text-amber-950 shadow-sm';
+            dotClass = 'bg-amber-600';
+            iconClass = 'text-amber-700';
           } else if (code >= 71 && code <= 86) {
             status = 'Snow / Hail Alert';
             color = 'red';
-            containerClass = 'bg-red-950/30 border-red-800/40 text-red-400';
-            dotClass = 'bg-red-400';
+            containerClass = 'bg-red-50/95 border-red-200 text-red-950 shadow-sm';
+            dotClass = 'bg-red-600';
+            iconClass = 'text-red-700';
           } else if (code >= 95) {
             status = 'Thunderstorm Warning';
             color = 'red';
-            containerClass = 'bg-red-950/30 border-red-800/40 text-red-400';
-            dotClass = 'bg-red-400';
+            containerClass = 'bg-red-100/95 border-red-300 text-red-950 shadow-sm';
+            dotClass = 'bg-red-600';
+            iconClass = 'text-red-800';
           }
+
+          // Parse hourly forecast
+          const forecastList: { time: string; temp: number; code: number }[] = [];
+          if (data.hourly && data.hourly.time && data.hourly.temperature_2m) {
+            for (let i = 0; i < data.hourly.time.length; i++) {
+              const date = new Date(data.hourly.time[i]);
+              const hour = date.getHours();
+              // Extract a few standard intervals
+              if (hour === 9 || hour === 13 || hour === 17 || hour === 21) {
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                forecastList.push({
+                  time: timeStr,
+                  temp: Math.round(data.hourly.temperature_2m[i]),
+                  code: data.hourly.weathercode ? data.hourly.weathercode[i] : 0
+                });
+              }
+            }
+          }
+
           setWeatherAlert({ 
             status, 
             code, 
@@ -166,7 +152,9 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
             windspeed: data.current_weather.windspeed,
             containerClass,
             dotClass,
-            placeName: weatherCoords.name
+            iconClass,
+            placeName: weatherCoords.name,
+            forecast: forecastList
           });
         }
       } catch (e) {
@@ -213,6 +201,10 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
           fetchBlockchain();
         } else if (payload.type === 'LOCATION_UPDATED') {
           setTourists(prev => prev.map(t => t.id === payload.data.touristId ? { ...t, ...payload.data } : t));
+          // Auto-track the tourist on the map in real-time if selected
+          if (trackedTouristIdRef.current === payload.data.touristId) {
+            setMapCenter({ lat: payload.data.lat, lng: payload.data.lng });
+          }
         } else if (payload.type === 'SOS_UPDATED') {
           setTourists(prev => {
             const updated = prev.map(t => t.id === payload.data.touristId ? { ...t, sosActive: payload.data.sosActive, sosTime: payload.data.sosTime } : t);
@@ -250,6 +242,9 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
             setActiveSOSCount(activeSosTourists.length);
             return updated;
           });
+          fetchBlockchain();
+        } else if (payload.type === 'NEWS_UPDATED') {
+          setSafetyNews(payload.data);
           fetchBlockchain();
         }
       } catch (err) {
@@ -409,6 +404,13 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
         const rData = await rRes.json();
         setIncidentReports(rData);
       }
+
+      // 6. Fetch Safety News
+      const newsRes = await fetch('/api/disaster-news');
+      if (newsRes.ok) {
+        const newsData = await newsRes.json();
+        setSafetyNews(newsData);
+      }
     } catch (e) {
       console.log('Failed to fetch data from Express server');
     }
@@ -497,28 +499,75 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
     }
   };
 
-  const handleRemoveTourist = async (tId: string) => {
-    if (!window.confirm('Are you sure you want to remove this tourist from the Shillong operations center? This action checked out/de-registers their digital passport and is stored securely.')) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/tourists/${tId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setTourists(prev => prev.filter(t => t.id !== tId));
-        const removedT = tourists.find(t => t.id === tId);
-        if (removedT && trackedPhoneNumber === removedT.phone) {
-          setIsCellLocked(false);
-          setTrackedPhoneNumber('');
+  const handleRemoveTourist = (tId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Checkout & De-register Hiker',
+      message: 'Are you sure you want to remove this tourist from the Shillong operations center? This action checks out/de-registers their digital passport and is stored securely.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/tourists/${tId}`, {
+            method: 'DELETE',
+          });
+          if (res.ok) {
+            setTourists(prev => prev.filter(t => t.id !== tId));
+            const removedT = tourists.find(t => t.id === tId);
+            if (removedT && trackedPhoneNumber === removedT.phone) {
+              setIsCellLocked(false);
+              setTrackedPhoneNumber('');
+            }
+            
+            // Forceful local logout of this tourist
+            const cached = localStorage.getItem('safetour_tourist');
+            if (cached) {
+              try {
+                const parsed = JSON.parse(cached);
+                if (parsed.id === tId) {
+                  localStorage.removeItem('safetour_tourist');
+                  window.dispatchEvent(new Event('storage'));
+                  window.dispatchEvent(new CustomEvent('safetour_logout', { detail: { id: tId } }));
+                }
+              } catch (e) {}
+            }
+          } else {
+            const errData = await res.json();
+            alert(errData.error || 'Failed to remove tourist.');
+          }
+        } catch (e) {
+          console.error('Failed to remove tourist', e);
         }
-      } else {
-        const errData = await res.json();
-        alert(errData.error || 'Failed to remove tourist.');
       }
-    } catch (e) {
-      console.error('Failed to remove tourist', e);
-    }
+    });
+  };
+
+  const handleLogoutAllTourists = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Bulk Hiker Checkout',
+      message: 'Are you sure you want to log out all tourists and clear all active portal sessions? This will instantly de-register and sign out every connected tourist.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch('/api/tourists/logout-all', {
+            method: 'POST',
+          });
+          if (res.ok) {
+            setTourists([]);
+            setIsCellLocked(false);
+            setTrackedPhoneNumber('');
+            
+            // Clear locally cached tourist session and dispatch logout event
+            localStorage.removeItem('safetour_tourist');
+            window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new CustomEvent('safetour_logout', { detail: { allCleared: true } }));
+          } else {
+            const errData = await res.json();
+            alert(errData.error || 'Failed to logout tourists.');
+          }
+        } catch (e) {
+          console.error('Failed to logout all tourists', e);
+        }
+      }
+    });
   };
 
   const handleCreateBroadcast = async (e: React.FormEvent) => {
@@ -566,7 +615,63 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
     }
   };
 
+  const handleCreateNews = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNewsTitle.trim() || !newNewsMessage.trim()) {
+      setNewsError('Title and message are required.');
+      return;
+    }
+    setNewsError('');
+    setIsPublishingNews(true);
+    try {
+      const res = await fetch('/api/disaster-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newNewsTitle,
+          message: newNewsMessage,
+          category: newNewsCategory,
+          severity: newNewsSeverity,
+        })
+      });
+      if (res.ok) {
+        setNewNewsTitle('');
+        setNewNewsMessage('');
+        setNewNewsCategory('Weather Warning');
+        setNewNewsSeverity('warning');
+        fetchAllData();
+      } else {
+        setNewsError('Failed to publish news advisory.');
+      }
+    } catch (err) {
+      setNewsError('Network communication error.');
+    } finally {
+      setIsPublishingNews(false);
+    }
+  };
+
+  const handleDeleteNews = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Archive Advisory',
+      message: 'Are you sure you want to archive and remove this safety advisory? This action is logged permanently on the blockchain.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/disaster-news/${id}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            fetchAllData();
+          }
+        } catch (err) {
+          console.error('Failed to delete safety news', err);
+        }
+      }
+    });
+  };
+
   const handleLocateOnMap = (tourist: Tourist) => {
+    setTrackedTouristId(tourist.id);
     setMapCenter({ lat: tourist.lat, lng: tourist.lng });
     setMapZoom(15);
   };
@@ -580,23 +685,23 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
   return (
     <div className="space-y-8 p-4 lg:p-8">
       {/* Developed By Banner */}
-      <div className="w-full text-center py-2 text-xs font-mono text-slate-500 bg-black/20 border border-white/5 rounded-xl mb-4">
-        Developed by Abhay Chavadi,Choudari Lalithya,Vaibhavi,Nandita,Pavan,Ramya V R
+      <div className="w-full text-center py-2.5 text-sm font-sans font-black text-slate-700 bg-white/70 border border-slate-200 rounded-xl mb-4 shadow-xs uppercase tracking-wider">
+        Developed by Abhay Chavadi, Choudari Lalithya, Vaibhavi, Nandita, Pavan, Ramya V R
       </div>
       
       {/* SOS DISPATCH WARNING ALARM PANEL */}
       {activeSOSCount > 0 && (
-        <div className="p-6 rounded-2xl border border-red-500/50 bg-red-950/45 text-red-200 animate-pulse flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl shadow-red-950/20">
-          <div className="absolute inset-y-0 left-0 w-2 bg-red-500" />
+        <div className="p-6 rounded-2xl border border-red-500 bg-red-650 text-white animate-pulse flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+          <div className="absolute inset-y-0 left-0 w-3 bg-red-900" />
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-red-600 rounded-full text-white animate-bounce">
-              <AlertOctagon className="w-8 h-8" />
+            <div className="p-3 bg-red-800 rounded-full text-white animate-bounce">
+              <AlertOctagon className="w-9 h-9" />
             </div>
             <div>
-              <h2 className="text-lg font-bold font-mono uppercase tracking-wide">
+              <h2 className="text-xl lg:text-2xl font-black font-sans uppercase tracking-wider">
                 CRITICAL INCIDENT RESPONDER BROADCAST ACTIVE
               </h2>
-              <p className="text-xs font-mono text-red-300">
+              <p className="text-sm font-sans font-extrabold text-red-100 mt-1">
                 {activeSOSCount} Tourist(s) transmitting emergency distress signals. Drone tracking units and rangers pre-dispatched.
               </p>
             </div>
@@ -605,7 +710,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSirenMuted(!isSirenMuted)}
-              className="p-2.5 rounded-full border border-red-500/30 bg-red-900/40 hover:bg-red-900/70 text-red-400 font-mono text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2.5 rounded-xl border border-red-400 bg-red-800 hover:bg-red-900 text-white font-sans text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
             >
               {isSirenMuted ? (
                 <>
@@ -623,75 +728,84 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
         </div>
       )}
 
-      {/* Automated Weather Notification Banner */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        {/* Automated Weather Notification Banner */}
       {weatherAlert && (
-        <div className={`w-full py-2 px-4 mb-8 rounded-xl border transition-all duration-300 text-xs font-mono flex flex-col xl:flex-row items-center justify-between backdrop-blur-md ${weatherAlert.containerClass}`}>
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className={`xl:col-span-12 w-full py-3 px-5 rounded-xl border transition-all duration-300 text-sm font-sans flex flex-col xl:flex-row items-center justify-between backdrop-blur-md ${weatherAlert.containerClass}`}
+        >
           <div className="flex items-center gap-4 mb-2 xl:mb-0 w-full xl:w-auto justify-between xl:justify-start">
-            <div className="flex items-center gap-1.5">
-              <Cloud className="w-4 h-4 animate-pulse" />
-              <span className="font-bold tracking-wider">{weatherAlert?.placeName?.toUpperCase() || 'UNKNOWN'}: {weatherAlert?.status?.toUpperCase() || ''}</span>
+            <div className="flex items-center gap-2 font-black">
+              <Cloud className={`w-5 h-5 animate-pulse ${weatherAlert.iconClass}`} />
+              <span className="font-black tracking-widest text-base">{weatherAlert?.placeName?.toUpperCase() || 'UNKNOWN'}: {weatherAlert?.status?.toUpperCase() || ''}</span>
             </div>
-            <div className="hidden sm:flex items-center gap-3 border-l border-white/10 pl-3">
-              <span className="flex items-center gap-1"><Thermometer className="w-3.5 h-3.5" /> {weatherAlert.temperature}°C</span>
-              <span className="flex items-center gap-1"><Wind className="w-3.5 h-3.5" /> {weatherAlert.windspeed} km/h</span>
+            <div className="hidden sm:flex items-center gap-4 border-l border-current/20 pl-4 font-extrabold">
+              <span className="flex items-center gap-1.5 text-base"><Thermometer className={`w-4 h-4 ${weatherAlert.iconClass}`} /> {weatherAlert.temperature}°C</span>
+              <span className="flex items-center gap-1.5 text-base"><Wind className={`w-4 h-4 ${weatherAlert.iconClass}`} /> {weatherAlert.windspeed} km/h</span>
             </div>
           </div>
           
           {weatherAlert.forecast && weatherAlert.forecast.length > 0 && (
-            <div className="flex items-center gap-4 text-[10px] sm:text-xs mb-2 xl:mb-0">
-              <span className="opacity-70 hidden sm:inline">TODAY:</span>
-              <div className="flex items-center gap-3 bg-black/20 px-3 py-1 rounded-full">
+            <div className="flex items-center gap-4 text-xs sm:text-sm mb-2 xl:mb-0">
+              <span className="hidden sm:inline font-black opacity-85">TODAY'S FORECAST:</span>
+              <div className="flex items-center gap-4 bg-white/80 border border-current/15 px-4 py-1.5 rounded-full shadow-sm">
                 {weatherAlert.forecast.map((f, i) => (
-                  <div key={i} className="flex items-center gap-1 border-r border-white/10 pr-3 last:border-0 last:pr-0">
-                    <span className="opacity-70">{f.time}</span>
-                    <span className="font-bold">{f.temp}°</span>
+                  <div key={i} className="flex items-center gap-1.5 border-r border-current/15 pr-4 last:border-0 last:pr-0">
+                    <span className="opacity-75 font-bold">{f.time}</span>
+                    <span className="font-black">{f.temp}°</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <form onSubmit={searchWeatherLocation} className="flex flex-wrap items-center gap-2 text-[10px] opacity-100 w-full xl:w-auto justify-end">
-            <input type="text" value={weatherSearchQuery} onChange={e => setWeatherSearchQuery(e.target.value)} placeholder="Enter city..." className="px-2 py-1 rounded bg-black/30 border border-white/20 text-white placeholder:text-white/40 outline-none focus:border-emerald-500 transition-colors" />
-            <button type="submit" className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded border border-white/20 cursor-pointer">SEARCH</button>
-            <span className="opacity-70 ml-2 hidden sm:inline">LIVE METEO SYNC</span>
-            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${weatherAlert.dotClass}`} />
+          <form onSubmit={searchWeatherLocation} className="flex flex-wrap items-center gap-2 text-xs font-sans font-black text-slate-800 w-full xl:w-auto justify-end">
+            <input type="text" value={weatherSearchQuery} onChange={e => setWeatherSearchQuery(e.target.value)} placeholder="Enter city..." className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 placeholder:text-slate-400 outline-none focus:border-emerald-500 font-bold transition-colors shadow-xs" />
+            <button type="submit" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg border border-emerald-500 font-black cursor-pointer shadow-xs">SEARCH</button>
+            <span className="ml-2 hidden sm:inline font-black tracking-wide text-[11px] text-slate-500">LIVE METEO SYNC</span>
+            <div className={`w-2 h-2 rounded-full animate-pulse ${weatherAlert.dotClass}`} />
           </form>
-        </div>
-      )}
+        </motion.div>
+      )}      {/* TOURIST DISPATCH TERMINAL & ONBOARDING (TOP SECTION) */}
 
-      {/* TOURIST DISPATCH TERMINAL & ONBOARDING (TOP SECTION) */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        
-        {/* DISPATCH TERMINAL QR ONBOARDING (XL: 5 COLS) */}
-        <div className="xl:col-span-5 p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative overflow-hidden flex flex-col justify-between">
+      {/* DISPATCH TERMINAL QR ONBOARDING (XL: 5 COLS) */}
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="xl:col-span-5 p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative overflow-hidden flex flex-col justify-between"
+        >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
           
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <h3 className="text-base font-sans font-black text-white uppercase tracking-wider">
                 TOURIST DISPATCH TERMINAL
               </h3>
             </div>
-            <p className="text-xs font-sans text-slate-300 leading-relaxed">
+            <p className="text-sm font-sans text-white font-bold leading-relaxed">
               Provide tourists with instant digital passport check-in. Have them scan the dynamic QR code with their mobile device camera.
             </p>
-            <div className="p-3 bg-slate-900/60 rounded-xl border border-white/5 space-y-2 font-mono text-[10px] text-slate-400">
-              <div className="flex items-center gap-1 text-emerald-400">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Fast, Zero-install mobile onboarding
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-white/10 space-y-2 font-sans text-xs text-slate-100 font-extrabold">
+              <div className="flex items-center gap-1.5 text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Fast, Zero-install mobile onboarding
               </div>
-              <div className="flex items-center gap-1 text-emerald-400">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Capture ID, nationality, and duration
+              <div className="flex items-center gap-1.5 text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Capture ID, nationality, and duration
               </div>
-              <div className="flex items-center gap-1 text-emerald-400">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Instant real-time dashboard sync
+              <div className="flex items-center gap-1.5 text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Instant real-time dashboard sync
               </div>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col sm:flex-row items-center gap-4 bg-slate-950/40 p-4 rounded-xl border border-white/5">
-            <div className="flex flex-col items-center gap-2 p-2.5 bg-[#0a0e10] border border-white/10 rounded-xl shadow-xl shrink-0">
+          <div className="mt-4 flex flex-col sm:flex-row items-center gap-4 bg-slate-950/60 p-4 rounded-xl border border-white/10">
+            <div className="flex flex-col items-center gap-2 p-2.5 bg-[#0a0e10] border border-white/15 rounded-xl shadow-xl shrink-0">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=000000&bgcolor=ffffff&data=${encodeURIComponent(
                   typeof window !== 'undefined' ? `${window.location.href.split('?')[0]}?view=tourist&t=${qrNonce}` : ''
@@ -699,256 +813,210 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                 alt="Dynamic Tourist Portal QR"
                 className="w-28 h-28 rounded border border-emerald-500/20 p-1 bg-white transition-all duration-300 transform hover:scale-105"
               />
-              <span className="text-[8px] font-mono font-bold text-emerald-400 uppercase tracking-widest text-center animate-pulse">
+              <span className="text-[10px] font-sans font-black text-emerald-300 uppercase tracking-widest text-center animate-pulse">
                 SCAN FOR MOBILE ENTRY
               </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    // Update URL and trigger redirection to the tourist view with the QR nonce
+                    const targetUrl = `${window.location.origin}${window.location.pathname}?view=tourist&t=${qrNonce}`;
+                    window.history.pushState({ path: targetUrl }, '', targetUrl);
+                    // Dispatch popstate event so App.tsx detects it immediately
+                    window.dispatchEvent(new Event('popstate'));
+                  }
+                }}
+                className="mt-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-[9px] cursor-pointer font-black uppercase transition-all shadow-md w-full text-center hover:scale-[1.03] active:scale-95"
+                title="Simulate scanning this QR code in your browser"
+              >
+                🖱️ SIMULATE SCAN
+              </button>
             </div>
             <div className="space-y-2 text-left min-w-0 flex-1">
-              <div className="text-[10px] text-slate-400 font-mono">
+              <div className="text-xs text-slate-100 font-sans font-extrabold leading-relaxed">
                 Onboard hikers, tourists, and wilderness guides to Shillong operations central.
               </div>
 
               {/* Dynamic QR Security Monitor */}
-              <div className="p-2 rounded bg-slate-900 border border-white/5 space-y-1 font-mono text-[9px]">
-                <div className="flex items-center justify-between text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+              <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-1.5 font-sans text-xs font-extrabold">
+                <div className="flex items-center justify-between text-slate-200">
+                  <span className="flex items-center gap-1 font-black">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
                     SECURE ROTATION ENGINE:
                   </span>
-                  <span className="font-bold text-emerald-400">{qrCountdown}s</span>
+                  <span className="font-black text-emerald-300">{qrCountdown}s</span>
                 </div>
-                <div className="w-full bg-slate-950 h-1 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
                   <div 
-                    className="bg-emerald-500 h-full transition-all duration-1000 ease-linear" 
+                    className="bg-emerald-400 h-full transition-all duration-1000 ease-linear" 
                     style={{ width: `${(qrCountdown / 15) * 100}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between pt-0.5 text-[8px] text-slate-500">
-                  <span className="truncate">NONCE: {qrNonce}</span>
+                <div className="flex items-center justify-between pt-0.5 text-[10px] text-slate-300 font-bold">
+                  <span className="truncate font-mono">NONCE: {qrNonce}</span>
                   <button 
                     onClick={() => {
                       setQrNonce(Math.random().toString(36).substring(2, 10).toUpperCase());
                       setQrCountdown(15);
                     }}
-                    className="px-1 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded text-[7px] cursor-pointer font-bold uppercase transition-colors"
+                    className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/45 text-emerald-300 hover:text-emerald-100 rounded text-[9px] cursor-pointer font-black uppercase transition-colors"
                   >
                     ROTATE NOW
                   </button>
                 </div>
               </div>
 
-              <div className="text-[9px] text-slate-500 font-mono select-all break-all leading-tight">
-                Portal Link: <span className="text-slate-300 underline">{typeof window !== 'undefined' ? `${window.location.href.split('?')[0]}?view=tourist` : ''}</span>
+              <div className="text-[10px] sm:text-xs text-slate-300 font-sans font-bold select-all break-all leading-tight">
+                Portal Link: <span className="text-slate-100 underline font-black">{typeof window !== 'undefined' ? `${window.location.href.split('?')[0]}?view=tourist` : ''}</span>
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* REGISTERED TOURISTS LIST (XL: 7 COLS) */}
-        <div className="xl:col-span-7 p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl flex flex-col justify-between">
-          <div className="h-full flex flex-col">
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="xl:col-span-7 p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl flex flex-col"
+        >
+          <div className="flex flex-col flex-1">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div>
-                <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-base font-sans font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                   <Search className="w-4 h-4 text-emerald-400" /> REGISTERED TOURIST PORTAL
                 </h3>
-                <p className="text-[10px] font-mono text-slate-400">
+                <p className="text-xs font-sans text-slate-200 font-bold">
                   Hikers who checked in and registered their digital passport via the Dispatch QR Code.
                 </p>
               </div>
 
-              {/* Filter Search */}
-              <div className="relative w-full sm:w-60">
-                <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search registered guests..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1 bg-slate-900 text-white border border-white/10 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded text-[11px] transition-all font-mono"
-                />
+              {/* Filter Search & Logout All */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-60">
+                  <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search registered guests..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-2.5 py-1.5 bg-slate-900 text-white border border-white/10 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded text-xs transition-all font-sans font-bold placeholder:text-slate-400"
+                  />
+                </div>
+                <button
+                  onClick={handleLogoutAllTourists}
+                  disabled={tourists.length === 0}
+                  className="px-3.5 py-1.5 bg-red-900 hover:bg-red-800 border border-red-500 hover:border-red-400 text-white disabled:opacity-30 disabled:hover:bg-red-950 text-xs font-sans uppercase font-black tracking-wider cursor-pointer rounded-lg transition-all shrink-0 shadow-md"
+                  title="Force check out and log out all active tourist sessions"
+                >
+                  LOGOUT ALL
+                </button>
               </div>
             </div>
 
             {/* Tourist Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1 max-h-[300px] flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1 flex-1">
               {filteredTourists.length === 0 ? (
-                <div className="col-span-full py-12 text-center text-slate-500 font-mono text-xs border border-dashed border-white/10 bg-slate-950/20 rounded-xl">
+                <div className="col-span-full py-12 text-center text-slate-300 font-sans text-sm font-black border border-dashed border-white/20 bg-slate-950/40 rounded-xl">
                   NO REGISTERED TOURISTS IN PORTAL YET.
                 </div>
               ) : (
                 filteredTourists.map(t => (
                   <div 
                     key={t.id} 
-                    className={`p-3 rounded-xl border relative overflow-hidden transition-all duration-300 ${
-                      t.sosActive 
-                      ? 'border-red-500/50 bg-red-950/40 text-red-200 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.15)]' 
-                      : 'border-white/5 bg-slate-900/60 text-slate-350 hover:border-emerald-500/30 hover:bg-slate-900/80'
+                    onClick={() => handleLocateOnMap(t)}
+                    className={`p-3.5 rounded-xl border relative overflow-hidden transition-all duration-300 cursor-pointer ${
+                      trackedTouristId === t.id
+                        ? 'border-emerald-500 bg-slate-800 shadow-[0_0_15px_rgba(16,185,129,0.15)] text-slate-100'
+                        : t.sosActive 
+                        ? 'border-red-500 bg-red-900 text-white animate-pulse shadow-md' 
+                        : 'border-white/10 bg-slate-900 text-slate-100 hover:border-emerald-500 hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex gap-2.5 items-start">
                       <img 
                         src={t.facePhoto} 
                         alt={t.name} 
-                        className="w-10 h-10 rounded-lg object-cover border border-white/10 bg-black shrink-0"
+                        className="w-12 h-12 rounded-lg object-cover border border-white/10 bg-black shrink-0"
                       />
-                      <div className="space-y-0.5 font-mono text-[10px] flex-1 min-w-0">
+                      <div className="space-y-1 font-sans text-xs flex-1 min-w-0 font-bold">
                         <div className="flex justify-between items-start gap-1">
-                          <span className="font-bold text-white block truncate">{t.name}</span>
-                          <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-tighter shrink-0 ${
+                          <span className="font-black text-white text-sm block truncate flex items-center gap-1.5">
+                            {trackedTouristId === t.id && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                            )}
+                            {t.name}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 ${
                             t.sosActive 
                             ? 'bg-red-600 text-white animate-pulse' 
                             : t.offlineMode 
-                            ? 'bg-amber-950 text-amber-400 border border-amber-500/20' 
-                            : 'bg-emerald-950 text-emerald-400 border border-emerald-500/20'
+                            ? 'bg-amber-900 text-amber-100 border border-amber-400' 
+                            : 'bg-emerald-900 text-emerald-100 border border-emerald-400'
                           }`}>
                             {t.sosActive ? 'SOS ALARM' : t.offlineMode ? 'OFFLINE' : 'LIVE'}
                           </span>
                         </div>
-                        <div className="text-slate-400 truncate">PHONE: {t.phone}</div>
-                        <div className="text-slate-500 flex items-center gap-1">
-                          <MapPin className="w-2.5 h-2.5 text-emerald-500" /> {t.lat.toFixed(4)}, {t.lng.toFixed(4)}
+                        <div className="text-slate-200 truncate font-sans font-bold">PHONE: {t.phone}</div>
+                        <div className="text-slate-300 flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-[10px] font-bold">LAT: {t.lat.toFixed(5)} LNG: {t.lng.toFixed(5)}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveTourist(t.id);
+                            }}
+                            className="px-2 py-1 bg-red-600 hover:bg-red-500 border border-red-400 text-white text-[10px] font-sans rounded font-black uppercase transition-all shrink-0 cursor-pointer shadow-sm"
+                          >
+                            CHECKOUT
+                          </button>
                         </div>
                       </div>
                     </div>
-
-                    <div className="mt-2.5 pt-2 border-t border-white/5 flex gap-1.5">
-                      <button
-                        onClick={() => handleLocateOnMap(t)}
-                        className="flex-1 py-1 bg-slate-950 hover:bg-slate-800 border border-white/10 text-[9px] text-slate-300 font-bold font-mono rounded text-center cursor-pointer transition-colors"
-                      >
-                        FOCUS MAP
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTrackedPhoneNumber(t.phone);
-                          setIsCellLocked(true);
-                          setMapCenter({ lat: t.lat, lng: t.lng });
-                          setMapZoom(15);
-                        }}
-                        className={`flex-1 py-1 text-[9px] font-bold font-mono rounded text-center cursor-pointer transition-all border ${
-                          isCellLocked && trackedPhoneNumber === t.phone
-                          ? 'bg-emerald-500 text-stone-950 border-emerald-500 hover:bg-emerald-400'
-                          : 'bg-slate-950 hover:bg-emerald-950/20 border-white/10 hover:border-emerald-500/40 text-emerald-400'
-                        }`}
-                      >
-                        {isCellLocked && trackedPhoneNumber === t.phone ? 'LOCK ACTIVE' : 'TRACK CELL'}
-                      </button>
-                      <button
-                        onClick={() => handleRemoveTourist(t.id)}
-                        className="px-2 py-1 bg-red-950/30 hover:bg-red-950 border border-red-500/20 hover:border-red-500/50 text-red-400 hover:text-red-300 rounded cursor-pointer transition-all flex items-center justify-center"
-                        title="De-register & Check out Tourist"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {t.sosActive && (
-                      <button
-                        onClick={() => handleResolveSos(t.id)}
-                        className="w-full mt-2 py-1 bg-red-600 hover:bg-red-500 text-[9px] text-white font-bold font-mono rounded text-center cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse transition-colors"
-                      >
-                        ACK RESCUE SIGNALS
-                      </button>
-                    )}
                   </div>
                 ))
               )}
             </div>
           </div>
-        </div>
-
+        </motion.div>
       </div>
 
-      {/* TWO COLUMN GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* LEFT COLUMN: MAP & GEO-FENCING CONTROLS (12 COLS) */}
-        <div className="lg:col-span-12 space-y-8">
+
+
+
+      
+      {/* EMERGENCY OPERATIONS CENTRAL MAP */}
+      <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl relative overflow-hidden shadow-2xl mb-8">
+        <h3 className="text-base font-sans font-black text-white mb-4 uppercase tracking-wider flex items-center gap-1.5">
+          <MapPin className="w-5 h-5 text-emerald-400" /> EMERGENCY OPERATIONS CENTRAL MAP
+        </h3>
+        <div className="h-[520px] w-full rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
+          <MapplsMap center={mapCenter} zoom={mapZoom} geoFences={geoFences} tourists={tourists} />
+        </div>
+      </div>
+
+      {/* REAL-TIME INCIDENT & BROADCAST TIMELINE */}
+      <div className="mb-8">
+        <IncidentTimeline 
+          incidentReports={incidentReports} 
+          broadcasts={activeAlerts} 
+          onSelectIncident={(lat, lng) => {
+            setMapCenter({ lat, lng });
+            setMapZoom(16);
+          }} 
+        />
+      </div>
+
           
-          {/* MAP TRACKING STATION */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl relative overflow-hidden shadow-2xl">
-            <h3 className="text-sm font-mono font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-400" /> EMERGENCY OPERATIONS CENTRAL MAP
-            </h3>
-
-            {/* Map Element */}
-            <div className="h-[520px] w-full rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
-                <Map
-                  center={mapCenter}
-                  zoom={mapZoom}
-                  onCameraChanged={(ev: any) => {
-                    setMapCenter(ev.detail.center);
-                    setMapZoom(ev.detail.zoom);
-                  }}
-                  mapId="DEMO_MAP_ID"
-                  internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                  style={{ width: '100%', height: '100%' }}
-                  gestureHandling="greedy"
-                  zoomControl={true}
-                  disableDefaultUI={false}
-                >
-                  {/* Draw circular geo-fences */}
-                  {geoFences.map(fence => (
-                    <React.Fragment key={fence.id}>
-                      <MapCircle 
-                        center={{ lat: fence.lat, lng: fence.lng }} 
-                        radius={fence.radius} 
-                        type={fence.type} 
-                      />
-                      <AdvancedMarker position={{ lat: fence.lat, lng: fence.lng }}>
-                        <div className={`p-1 rounded-full border text-[10px] font-mono font-bold ${
-                          fence.type === 'safe' 
-                          ? 'border-emerald-500 bg-emerald-950/85 text-emerald-400' 
-                          : 'border-red-500 bg-red-950/85 text-red-400'
-                        }`}>
-                          {fence.name}
-                        </div>
-                      </AdvancedMarker>
-                    </React.Fragment>
-                  ))}
-
-                  {/* Display markers for all registered tourists */}
-                  {tourists.map(tourist => (
-                    <AdvancedMarker 
-                      key={tourist.id} 
-                      position={{ lat: tourist.lat, lng: tourist.lng }}
-                    >
-                      <div className="relative flex flex-col items-center">
-                        <div className={`p-1 rounded-full border-2 bg-slate-900 ${
-                          tourist.sosActive 
-                          ? 'border-red-500 animate-pulse shadow-lg shadow-red-500/50 scale-110' 
-                          : 'border-emerald-500'
-                        }`}>
-                          <img 
-                            src={tourist.facePhoto} 
-                            alt={tourist.name} 
-                            className="w-10 h-10 rounded-full object-cover" 
-                          />
-                        </div>
-                        <span className={`mt-1 px-1.5 py-0.5 font-mono text-[8px] font-bold rounded shadow-md ${
-                          tourist.sosActive 
-                          ? 'bg-red-600 text-white animate-bounce' 
-                          : 'bg-slate-900 text-slate-300'
-                        }`}>
-                          {tourist.name}
-                        </span>
-                      </div>
-                    </AdvancedMarker>
-                  ))}
-                </Map>
-            </div>
-          </div>
-
-          {/* GPS SATELLITE CELLULAR LOCK & QR CHECKPOINT SCANNER */}
+      {/* GPS SATELLITE CELLULAR LOCK & QR CHECKPOINT SCANNER */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* QR CHECKPOINT SCANNER */}
             <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl flex flex-col justify-between">
               <div>
-                <h3 className="text-sm font-mono font-bold text-white mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Shield className="w-4 h-4 text-emerald-400" /> DIGITAL ID QR CHECKPOINT
+                <h3 className="text-base font-sans font-black text-white mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-5 h-5 text-emerald-400" /> DIGITAL ID QR CHECKPOINT
                 </h3>
-                <p className="text-[10px] font-mono text-slate-400 mb-4 leading-relaxed">
+                <p className="text-xs font-sans text-slate-200 mb-4 font-bold leading-relaxed">
                   Scan a tourist's dynamic QR code block to securely verify identities and extract telemetry readings.
                 </p>
               </div>
@@ -961,9 +1029,9 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                     setScanSuccess(false);
                     setScannedTourist(null);
                   }}
-                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold uppercase text-xs rounded transition-all cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md border border-emerald-400"
                 >
-                  <Camera className="w-4 h-4" /> LAUNCH CHECKPOINT SCANNER
+                  <Camera className="w-5 h-5" /> LAUNCH CHECKPOINT SCANNER
                 </button>
               </div>
             </div>
@@ -971,31 +1039,31 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
             {/* LIVE CELLULAR GPS PHONE TRACKER */}
             <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl flex flex-col justify-between">
               <div>
-                <h3 className="text-sm font-mono font-bold text-white mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Phone className="w-4 h-4 text-emerald-400 animate-pulse" /> SATELLITE CELLULAR TRACKER
+                <h3 className="text-base font-sans font-black text-white mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Phone className="w-5 h-5 text-emerald-400 animate-pulse" /> SATELLITE CELLULAR TRACKER
                 </h3>
-                <p className="text-[10px] font-mono text-slate-400 mb-4 leading-relaxed">
+                <p className="text-xs font-sans text-slate-200 mb-4 font-bold leading-relaxed">
                   Lock on to any registered cellular contact frequency. Real-time GPS pings are automatically projected on the map.
                 </p>
               </div>
 
               {/* Cellular Tracker Input & Display */}
-              <div className="space-y-3 font-mono">
+              <div className="space-y-3 font-sans text-xs font-bold">
                 {isCellLocked ? (
-                  <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+                  <div className="p-3 bg-emerald-950 border border-emerald-400 rounded-xl flex items-center justify-between">
                     <div className="space-y-1">
-                      <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> SATELLITE GPS LOCK-ON
+                      <span className="text-[10px] text-emerald-300 font-black uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> SATELLITE GPS LOCK-ON
                       </span>
-                      <span className="text-xs text-white font-bold block">{trackedPhoneNumber}</span>
+                      <span className="text-sm text-white font-black block">{trackedPhoneNumber}</span>
                       {(() => {
                         const t = tourists.find(t => t.phone.replace(/\s+/g, '') === trackedPhoneNumber.replace(/\s+/g, ''));
                         return t ? (
-                          <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
+                          <span className="text-[11px] text-slate-200 font-bold block truncate max-w-[150px]">
                             Tracking: {t.name} ({t.lat.toFixed(5)}, {t.lng.toFixed(5)})
                           </span>
                         ) : (
-                          <span className="text-[9px] text-red-400 block">Out of grid range / Offline</span>
+                          <span className="text-[11px] text-red-300 font-bold block">Out of grid range / Offline</span>
                         );
                       })()}
                     </div>
@@ -1004,7 +1072,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                         setIsCellLocked(false);
                         setTrackedPhoneNumber('');
                       }}
-                      className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-500/30 hover:border-red-500 font-bold text-[10px] rounded transition-all cursor-pointer"
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white border border-red-400 font-black text-xs rounded-lg transition-all cursor-pointer shadow-sm"
                     >
                       BREAK LOCK
                     </button>
@@ -1014,7 +1082,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                     <select
                       value={trackedPhoneNumber}
                       onChange={(e) => setTrackedPhoneNumber(e.target.value)}
-                      className="flex-1 p-2 bg-slate-900 border border-white/10 text-white rounded text-xs"
+                      className="flex-1 p-2.5 bg-slate-900 border border-white/10 text-white rounded-lg text-xs font-sans font-bold"
                     >
                       <option value="">-- SELECT PHONE --</option>
                       {tourists.map(t => (
@@ -1032,7 +1100,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                           setMapZoom(15);
                         }
                       }}
-                      className="px-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 text-stone-950 font-bold text-xs rounded transition-all cursor-pointer flex items-center justify-center"
+                      className="px-5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white font-black text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center shadow-sm border border-emerald-400"
                     >
                       LOCK ON
                     </button>
@@ -1043,26 +1111,26 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
           </div>
 
           {/* GLOBAL EMERGENCY BROADCAST DISPATCH */}
-          <div className="p-6 rounded-2xl border border-red-500/30 bg-red-950/5 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+          <div className="p-6 rounded-2xl border border-red-500 bg-black/40 backdrop-blur-xl shadow-2xl relative overflow-hidden">
             {/* Visual warning background pattern */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-[repeating-linear-gradient(45deg,#ef4444,#ef4444_10px,#000_10px,#000_20px)] opacity-60" />
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[repeating-linear-gradient(45deg,#ef4444,#ef4444_10px,#000_10px,#000_20px)] opacity-60" />
             
-            <h3 className="text-sm font-mono font-bold text-red-400 mb-4 uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldAlert className="w-4 h-4 text-red-500 animate-pulse" /> GLOBAL EMERGENCY BROADCAST DISPATCH
+            <h3 className="text-base font-sans font-black text-red-400 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldAlert className="w-5 h-5 text-red-500 animate-pulse" /> GLOBAL EMERGENCY BROADCAST DISPATCH
             </h3>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Broadcast Trigger Form */}
-              <form onSubmit={handleCreateBroadcast} className="space-y-4 font-mono text-xs">
+              <form onSubmit={handleCreateBroadcast} className="space-y-4 font-sans text-xs font-bold">
                 <div>
-                  <label className="block text-slate-400 uppercase text-[10px] mb-1">Select Alert Preset (Optional)</label>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Select Alert Preset (Optional)</label>
                   <select
                     onChange={(e) => {
                       if (e.target.value) {
                         setNewBroadcastMessage(e.target.value);
                       }
                     }}
-                    className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-red-500 rounded text-xs cursor-pointer"
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-red-500 rounded-lg text-xs font-sans font-bold cursor-pointer"
                   >
                     <option value="">-- SELECT PRESET ALERT --</option>
                     <option value="Severe weather warning: Storm front approaching Shillong. Take shelter immediately.">Severe Weather Warning</option>
@@ -1073,24 +1141,24 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 uppercase text-[10px] mb-1">Custom Alert Message</label>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Custom Alert Message</label>
                   <textarea
                     required
                     rows={3}
                     placeholder="E.g., Avalanche warning or high wind warnings..."
                     value={newBroadcastMessage}
                     onChange={(e) => setNewBroadcastMessage(e.target.value)}
-                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded font-sans text-xs leading-relaxed"
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-lg font-sans text-xs leading-relaxed font-bold"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-400 uppercase text-[10px] mb-1">Severity Level</label>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Severity Level</label>
                     <select
                       value={broadcastSeverity}
                       onChange={(e) => setBroadcastSeverity(e.target.value as any)}
-                      className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-red-500 rounded text-xs cursor-pointer"
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-red-500 rounded-lg text-xs font-sans font-bold cursor-pointer"
                     >
                       <option value="warning">⚠️ WARNING</option>
                       <option value="critical">🚨 CRITICAL</option>
@@ -1102,16 +1170,16 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                     <button
                       type="submit"
                       disabled={isBroadcasting}
-                      className="w-full py-2 bg-red-600 hover:bg-red-500 text-stone-950 hover:text-white font-bold uppercase text-xs rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.2)] border border-red-500/30"
+                      className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md border border-red-500"
                     >
                       {isBroadcasting ? (
                         <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-stone-950" />
+                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
                           <span>SENDING...</span>
                         </>
                       ) : (
                         <>
-                          <Radio className="w-3.5 h-3.5 animate-pulse text-stone-950" />
+                          <Radio className="w-4 h-4 animate-pulse text-white" />
                           <span>SEND BROADCAST</span>
                         </>
                       )}
@@ -1120,7 +1188,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                 </div>
 
                 {broadcastError && (
-                  <p className="text-[10px] text-red-400 font-semibold">{broadcastError}</p>
+                  <p className="text-xs text-red-400 font-black">{broadcastError}</p>
                 )}
               </form>
 
@@ -1128,12 +1196,12 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
               <div className="flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">ACTIVE TRANSMISSIONS</h4>
+                    <h4 className="text-[10px] font-black text-slate-200 uppercase tracking-widest">ACTIVE TRANSMISSIONS</h4>
                     {activeAlerts.length > 0 && (
                       <button
                         type="button"
                         onClick={() => handleClearBroadcast()}
-                        className="text-[9px] text-red-400 hover:text-red-300 font-bold uppercase border border-red-500/20 hover:border-red-500/40 px-2 py-0.5 rounded cursor-pointer transition-all"
+                        className="text-[10px] text-red-300 hover:text-red-100 font-black uppercase border border-red-500 hover:border-red-400 px-2.5 py-1 rounded cursor-pointer transition-all bg-red-950/40 shadow-sm"
                       >
                         CLEAR ALL ALERTS
                       </button>
@@ -1141,7 +1209,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                   </div>
 
                   {activeAlerts.length === 0 ? (
-                    <div className="p-6 text-center border border-white/5 bg-white/2 rounded-xl text-slate-500 text-[10px] font-mono">
+                    <div className="p-6 text-center border border-white/10 bg-slate-900 rounded-xl text-slate-400 text-xs font-sans font-black">
                       NO ACTIVE BROADCASTS CURRENTLY TRANSMITTING
                     </div>
                   ) : (
@@ -1149,27 +1217,27 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                       {activeAlerts.map((alert) => (
                         <div
                           key={alert.id}
-                          className={`p-3 rounded-lg border flex justify-between items-start gap-4 text-[11px] ${
+                          className={`p-3 rounded-xl border flex justify-between items-start gap-4 text-xs font-sans font-bold ${
                             alert.severity === 'critical'
-                              ? 'border-red-500/30 bg-red-950/15 text-red-200'
+                              ? 'border-red-400 bg-red-950 text-red-100'
                               : alert.severity === 'info'
-                              ? 'border-blue-500/30 bg-blue-950/15 text-blue-200'
-                              : 'border-yellow-500/30 bg-yellow-950/15 text-yellow-200'
+                              ? 'border-blue-400 bg-blue-950 text-blue-100'
+                              : 'border-yellow-400 bg-yellow-950 text-yellow-100'
                           }`}
                         >
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 font-bold text-[9px] uppercase">
-                              <span className={`w-1.5 h-1.5 rounded-full ${
+                            <div className="flex items-center gap-1.5 font-black text-[10px] uppercase">
+                              <span className={`w-2 h-2 rounded-full ${
                                 alert.severity === 'critical' ? 'bg-red-500' : alert.severity === 'info' ? 'bg-blue-500' : 'bg-yellow-500'
                               } animate-ping`} />
                               <span>{alert.severity} • {new Date(alert.timestamp).toLocaleTimeString()}</span>
                             </div>
-                            <p className="font-sans leading-relaxed text-white text-xs">{alert.message}</p>
+                            <p className="font-sans leading-relaxed text-white text-xs font-black">{alert.message}</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => handleClearBroadcast(alert.id)}
-                            className="text-slate-400 hover:text-red-400 text-xs font-bold font-mono p-1 cursor-pointer transition-colors"
+                            className="text-white hover:text-red-400 text-sm font-bold font-mono p-1 cursor-pointer transition-colors"
                             title="Remove Alert"
                           >
                             ✕
@@ -1180,8 +1248,8 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                   )}
                 </div>
 
-                <div className="p-3 bg-black/30 border border-white/5 rounded-xl text-[9px] leading-relaxed text-slate-500 mt-4">
-                  🚨 <span className="text-slate-400 font-semibold">Broadcast Verification:</span> Sending a broadcast automatically generates a permanent emergency proof log.
+                <div className="p-3 bg-slate-900 border border-white/10 rounded-xl text-[10px] leading-relaxed text-slate-300 mt-4 font-bold">
+                  🚨 <span className="text-white font-black">Broadcast Verification:</span> Sending a broadcast automatically generates a permanent emergency proof log.
                 </div>
               </div>
             </div>
@@ -1189,91 +1257,78 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
 
           {/* GEO-FENCING CONTROLLER STATION */}
           <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl">
-            <h3 className="text-sm font-mono font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-1.5">
-              <Shield className="w-4 h-4 text-emerald-400" /> DEPLOY REAL-TIME GEO-FENCE
+            <h3 className="text-base font-sans font-black text-white mb-4 uppercase tracking-wider flex items-center gap-1.5">
+              <Shield className="w-5 h-5 text-emerald-400" /> DEPLOY REAL-TIME GEO-FENCE
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Form creation */}
-              <form onSubmit={handleCreateFence} className="space-y-4 font-mono text-xs">
-                <div>
-                  <label className="block text-slate-400 uppercase text-[10px] mb-1">Place Search (Auto-fill Coordinates)</label>
-                  <div className="flex gap-2">
-                    <PlaceAutocomplete onPlaceSelect={(place) => {
-                      if (place.geometry?.location) {
-                        setNewFenceLat(place.geometry.location.lat().toString());
-                        setNewFenceLng(place.geometry.location.lng().toString());
-                        if (place.name) setNewFenceName(place.name);
-                        setMapCenter({ lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
-                      }
-                    }} />
-                  </div>
-                </div>
+              <form onSubmit={handleCreateFence} className="space-y-4 font-sans text-xs font-bold">
 
                 <div>
-                  <label className="block text-slate-400 uppercase text-[10px] mb-1">Fence Area Name</label>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Fence Area Name</label>
                   <input
                     type="text"
                     required
                     placeholder="E.g., Avalanche Slopes Warning"
                     value={newFenceName}
                     onChange={(e) => setNewFenceName(e.target.value)}
-                    className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-slate-400 uppercase text-[10px] mb-1">Fence Type</label>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Fence Type</label>
                     <select
                       value={newFenceType}
                       onChange={(e: any) => setNewFenceType(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold cursor-pointer"
                     >
                       <option value="danger">DANGER ZONE</option>
                       <option value="safe">SAFE ZONE</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-400 uppercase text-[10px] mb-1">Radius (Meters)</label>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Radius (Meters)</label>
                     <input
                       type="number"
                       required
                       placeholder="e.g. 800"
                       value={newFenceRadius}
                       onChange={(e) => setNewFenceRadius(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-slate-400 uppercase text-[10px] mb-1">Latitude</label>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Latitude</label>
                     <input
                       type="number"
                       step="any"
                       required
                       value={newFenceLat}
                       onChange={(e) => setNewFenceLat(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-400 uppercase text-[10px] mb-1">Longitude</label>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Longitude</label>
                     <input
                       type="number"
                       step="any"
                       required
                       value={newFenceLng}
                       onChange={(e) => setNewFenceLng(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded"
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold"
                     />
                   </div>
                 </div>
 
                 {fenceFormError && (
-                  <div className="p-2.5 bg-red-950/30 border border-red-500/20 text-red-400 text-[11px]">
+                  <div className="p-3 bg-red-950 border border-red-500 text-red-200 text-xs rounded-lg font-black">
                     {fenceFormError}
                   </div>
                 )}
@@ -1281,37 +1336,37 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                 <button
                   type="submit"
                   disabled={isDeployingFence}
-                  className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold uppercase text-[11px] rounded transition-all cursor-pointer flex items-center justify-center gap-1"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-emerald-400 shadow-md"
                 >
-                  <Plus className="w-4 h-4" /> DEPLOY GEO-FENCE SIGNAL TO BROADCAST
+                  <Plus className="w-5 h-5" /> DEPLOY GEO-FENCE SIGNAL TO BROADCAST
                 </button>
               </form>
 
               {/* Geo-fence active list */}
-              <div className="space-y-3">
-                <span className="block text-slate-400 font-mono uppercase text-[10px]">CURRENT DEPLOYED SIGNAL FENCES</span>
+              <div className="space-y-3 font-sans text-xs font-bold">
+                <span className="block text-slate-200 font-sans uppercase text-[10px] font-black tracking-wide">CURRENT DEPLOYED SIGNAL FENCES</span>
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                   {geoFences.map(fence => (
                     <div 
                       key={fence.id} 
-                      className={`p-3 rounded-lg border font-mono text-[11px] flex items-center justify-between ${
+                      className={`p-3.5 rounded-xl border font-sans text-xs flex items-center justify-between ${
                         fence.type === 'safe' 
-                        ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-400' 
-                        : 'border-red-500/20 bg-red-950/20 text-red-400'
+                        ? 'border-emerald-400 bg-emerald-950 text-emerald-100 font-black' 
+                        : 'border-red-400 bg-red-950 text-red-100 font-black'
                       }`}
                     >
                       <div>
-                        <span className="block font-bold">{fence.name}</span>
-                        <span className="text-[9px] opacity-75">
+                        <span className="block font-black text-sm">{fence.name}</span>
+                        <span className="text-[10px] text-slate-250">
                           LAT: {fence.lat.toFixed(4)}, LNG: {fence.lng.toFixed(4)} • {fence.radius}m
                         </span>
                       </div>
                       <button
                         onClick={() => handleDeleteFence(fence.id)}
-                        className="p-1 hover:bg-slate-800 rounded border border-transparent hover:border-white/10 text-slate-400 hover:text-red-400 transition-all cursor-pointer"
+                        className="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg border border-red-400 hover:text-white transition-all cursor-pointer shadow-sm"
                         title="Remove Geo-fence"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
@@ -1326,16 +1381,16 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
             <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
             
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <AlertOctagon className="w-4 h-4 text-amber-500 animate-pulse" /> DISPATCH INCIDENT RADAR
+              <h3 className="text-base font-sans font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                <AlertOctagon className="w-5 h-5 text-amber-500 animate-pulse" /> DISPATCH INCIDENT RADAR
               </h3>
-              <div className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 font-mono text-[9px] text-amber-400 font-bold uppercase tracking-wider animate-pulse">
+              <div className="px-3 py-1 rounded-full bg-amber-500 border border-amber-600 font-sans text-[10px] text-white font-black uppercase tracking-wider animate-pulse shadow-sm">
                 {incidentReports.filter(r => r.status === 'active').length} Active Reports
               </div>
             </div>
 
             {incidentReports.length === 0 ? (
-              <div className="p-8 text-center border border-white/5 bg-white/2 rounded-2xl text-slate-500 text-[11px] font-mono">
+              <div className="p-8 text-center border border-white/10 bg-slate-900 rounded-2xl text-slate-400 text-xs font-sans font-black">
                 NO SUBMITTED INCIDENTS ON PATROL RADAR
               </div>
             ) : (
@@ -1347,38 +1402,38 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                   return (
                     <div 
                       key={report.id}
-                      className={`p-4 rounded-xl border font-mono text-xs transition-all relative ${
+                      className={`p-4 rounded-xl border font-sans text-xs transition-all relative ${
                         isResolved 
-                        ? 'border-emerald-500/15 bg-emerald-950/5 text-slate-400' 
-                        : 'border-amber-500/20 bg-amber-950/10 text-slate-200'
+                        ? 'border-emerald-500 bg-emerald-950/20 text-slate-300 font-bold' 
+                        : 'border-amber-500 bg-amber-950/20 text-white font-bold'
                       }`}
                     >
                       <div className="flex justify-between items-start gap-4 mb-2">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <span className={`w-2 h-2 rounded-full ${isResolved ? 'bg-emerald-500' : 'bg-amber-500 animate-ping'}`} />
-                            <span className="font-bold text-[11px] uppercase tracking-wider">
+                            <span className={`w-2.5 h-2.5 rounded-full ${isResolved ? 'bg-emerald-500' : 'bg-amber-500 animate-ping'}`} />
+                            <span className="font-black text-sm uppercase tracking-wider text-white">
                               {matchTourist ? matchTourist.name : 'Guest Scout'}
                             </span>
                             {report.touristId && (
-                              <span className="text-[10px] text-slate-500">
-                                (ID: {report.touristId.substring(0, 8)})
+                              <span className="text-[10px] text-slate-300 font-black bg-slate-800 px-1.5 py-0.5 rounded">
+                                ID: {report.touristId.substring(0, 8)}
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] text-slate-500">
-                            COORD-TAG: <span className="text-slate-300 font-bold underline cursor-pointer hover:text-emerald-400" onClick={() => {
+                          <p className="text-xs text-slate-300 font-bold">
+                            COORD-TAG: <span className="text-white font-black underline cursor-pointer hover:text-emerald-400 bg-slate-900 px-2 py-0.5 rounded" onClick={() => {
                               setMapCenter({ lat: report.lat, lng: report.lng });
                               setMapZoom(16);
                             }}>{report.lat.toFixed(5)}, {report.lng.toFixed(5)}</span>
                           </p>
                         </div>
-                        <div className="text-right text-[9px] text-slate-500">
+                        <div className="text-right text-[10px] text-slate-200 font-black bg-slate-800 px-2 py-0.5 rounded">
                           {new Date(report.timestamp).toLocaleTimeString()}
                         </div>
                       </div>
 
-                      <p className="bg-black/30 p-2.5 rounded-lg border border-white/5 text-xs text-white leading-relaxed mb-3">
+                      <p className="bg-slate-900 p-3 rounded-lg border border-white/15 text-xs text-white font-bold leading-relaxed mb-3">
                         {report.message}
                       </p>
 
@@ -1389,24 +1444,24 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                             setMapCenter({ lat: report.lat, lng: report.lng });
                             setMapZoom(16);
                           }}
-                          className="px-2.5 py-1 text-[9px] font-bold font-mono border border-white/10 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-400 rounded transition-all cursor-pointer bg-slate-900/40 flex items-center gap-1"
+                          className="px-3 py-1.5 text-[10px] font-black font-sans border border-white hover:border-emerald-500 text-white hover:text-emerald-400 rounded-lg transition-all cursor-pointer bg-slate-900/60 flex items-center gap-1 shadow-sm"
                         >
-                          <MapPin className="w-3 h-3" /> TRACK LOCATION
+                          <MapPin className="w-3.5 h-3.5" /> TRACK LOCATION
                         </button>
 
                         {!isResolved && (
                           <button
                             type="button"
                             onClick={() => handleResolveReport(report.id)}
-                            className="px-3 py-1 text-[9px] font-bold font-mono bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded shadow-md cursor-pointer flex items-center gap-1 transition-all"
+                            className="px-3.5 py-1.5 text-[10px] font-black font-sans bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md cursor-pointer flex items-center gap-1 transition-all border border-emerald-400"
                           >
-                            <CheckCircle2 className="w-3 h-3" /> MARK RESOLVED
+                            <CheckCircle2 className="w-3.5 h-3.5" /> MARK RESOLVED
                           </button>
                         )}
 
                         {isResolved && (
-                          <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/40 border border-emerald-500/20 px-2 py-0.5 rounded">
-                            <CheckCircle2 className="w-3 h-3" /> RESOLVED & ARCHIVED
+                          <span className="text-[10px] font-black text-emerald-300 flex items-center gap-1 bg-emerald-950 border border-emerald-500 px-2.5 py-1 rounded-lg">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> RESOLVED & ARCHIVED
                           </span>
                         )}
                       </div>
@@ -1417,10 +1472,154 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
             )}
           </div>
 
-        </div>
+          {/* SAFETY HUB NEWS & ADVISORIES DISPATCH */}
+          <div className="p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+            {/* Visual background ambient light */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            
+            <h3 className="text-base font-sans font-black text-white mb-4 uppercase tracking-wider flex items-center gap-1.5">
+              <Newspaper className="w-5 h-5 text-emerald-400" /> SAFETY HUB NEWS & ADVISORIES
+            </h3>
 
-        {/* RIGHT COLUMN WAS HERE, NOW REMOVED */}
-      </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* News Publish Form */}
+              <form onSubmit={handleCreateNews} className="space-y-4 font-sans text-xs font-bold">
+                <div>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Advisory Headline / Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="E.g., 🚨 HEAVY RAINFALL IN SHILLONG"
+                    value={newNewsTitle}
+                    onChange={(e) => setNewNewsTitle(e.target.value)}
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Category</label>
+                  <select
+                    value={newNewsCategory}
+                    onChange={(e) => setNewNewsCategory(e.target.value)}
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold cursor-pointer"
+                  >
+                    <option value="Weather Warning">Weather Warning</option>
+                    <option value="Road & Travel">Road & Travel</option>
+                    <option value="Local Safety">Local Safety</option>
+                    <option value="System Announcement">System Announcement</option>
+                    <option value="General Safety">General Safety</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Severity Level</label>
+                    <select
+                      value={newNewsSeverity}
+                      onChange={(e) => setNewNewsSeverity(e.target.value as any)}
+                      className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 rounded-lg text-xs font-sans font-bold cursor-pointer"
+                    >
+                      <option value="info">ℹ️ INFO</option>
+                      <option value="warning">⚠️ WARNING</option>
+                      <option value="critical">🚨 CRITICAL</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={isPublishingNews}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md border border-emerald-500"
+                    >
+                      {isPublishingNews ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                          <span>PUBLISHING...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-white" />
+                          <span>PUBLISH ADVISORY</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-200 uppercase text-[10px] mb-1.5 font-black tracking-wide">Detailed Advisory Message</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide full description and travel advice for tourists..."
+                    value={newNewsMessage}
+                    onChange={(e) => setNewNewsMessage(e.target.value)}
+                    className="w-full p-2.5 bg-slate-900 border border-white/10 text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg font-sans text-xs leading-relaxed font-bold"
+                  />
+                </div>
+
+                {newsError && (
+                  <p className="text-xs text-red-400 font-black">{newsError}</p>
+                )}
+              </form>
+
+              {/* Active News List */}
+              <div className="flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-[10px] font-black text-slate-200 uppercase tracking-widest">CURRENT ACTIVE ADVISORIES</h4>
+                    <div className="px-2.5 py-1 rounded bg-slate-900 border border-white/10 text-[10px] text-emerald-400 font-black">
+                      {safetyNews.length} Active
+                    </div>
+                  </div>
+
+                  {safetyNews.length === 0 ? (
+                    <div className="p-8 text-center border border-white/10 bg-slate-900 rounded-xl text-slate-400 text-xs font-sans font-black">
+                      NO SAFETY HUB NEWS CURRENTLY PUBLISHED
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[310px] overflow-y-auto pr-1">
+                      {safetyNews.map((newsItem) => (
+                        <div
+                          key={newsItem.id}
+                          className={`p-3.5 rounded-xl border flex justify-between items-start gap-4 text-xs font-sans font-bold ${
+                            newsItem.severity === 'critical'
+                              ? 'border-red-400 bg-red-950/20 text-red-100'
+                              : newsItem.severity === 'info'
+                              ? 'border-blue-400 bg-blue-950/20 text-blue-100'
+                              : 'border-yellow-400 bg-yellow-950/20 text-yellow-100'
+                          }`}
+                        >
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 font-black text-[10px] uppercase">
+                              <span className={`w-2.5 h-2.5 rounded-full ${
+                                newsItem.severity === 'critical' ? 'bg-red-500 animate-pulse' : newsItem.severity === 'info' ? 'bg-blue-500' : 'bg-yellow-500'
+                              }`} />
+                              <span>{newsItem.category} • {new Date(newsItem.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <h4 className="font-sans leading-relaxed text-white text-xs font-black truncate">{newsItem.title}</h4>
+                            <p className="font-sans text-[11px] text-slate-300 font-bold leading-normal">{newsItem.message}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNews(newsItem.id)}
+                            className="text-slate-400 hover:text-red-400 p-1.5 bg-slate-900 hover:bg-slate-850 rounded-lg border border-white/10 transition-colors shrink-0 cursor-pointer"
+                            title="Archive Advisory"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-slate-900 border border-white/10 rounded-xl text-[10px] leading-relaxed text-slate-300 mt-4 font-bold">
+                  📢 <span className="text-white font-black">Safety Hub Broadcast:</span> News published here instantly broadcasts to all tourist devices connected to the Safety Hub in real-time.
+                </div>
+              </div>
+            </div>
+          </div>
 
       {/* QR CHECKPOINT SCANNER MODAL */}
       {isQrScannerOpen && (
@@ -1580,6 +1779,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => {
+                          setTrackedTouristId(scannedTourist.id);
                           setMapCenter({ lat: scannedTourist.lat, lng: scannedTourist.lng });
                           setMapZoom(15);
                           setIsQrScannerOpen(false);
@@ -1592,6 +1792,7 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                         onClick={() => {
                           setTrackedPhoneNumber(scannedTourist.phone);
                           setIsCellLocked(true);
+                          setTrackedTouristId(scannedTourist.id);
                           setMapCenter({ lat: scannedTourist.lat, lng: scannedTourist.lng });
                           setMapZoom(15);
                           setIsQrScannerOpen(false);
@@ -1615,6 +1816,40 @@ export default function AdminView({ googleMapsApiKey }: { googleMapsApiKey: stri
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-500/30 p-6 rounded-2xl shadow-[0_0_50px_rgba(239,68,68,0.15)] flex flex-col gap-4 max-w-sm w-full font-sans text-white">
+            <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+              <div className="p-2 bg-red-950/50 rounded-xl text-red-500 border border-red-500/20">
+                <Shield className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-red-400">{confirmModal.title}</h3>
+                <span className="text-[10px] font-mono font-black text-slate-400">OPERATION DESK SECURE SIGN-OFF</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 font-bold leading-relaxed">{confirmModal.message}</p>
+            <div className="flex gap-2.5 mt-2">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 border border-white/10 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal(null);
+                }}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-900/20 transition-all cursor-pointer uppercase"
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}

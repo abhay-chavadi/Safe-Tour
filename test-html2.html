@@ -1,0 +1,33 @@
+<html>
+<head>
+    <title>Get Geolocation</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+    html,
+    body,
+    #map {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100vh;
+    }
+                    
+    </style>
+        <script src="https://sdk.mappls.com/map/sdk/web?v=3.0&access_token=Token&callback=initMap1" defer async></script>
+    </head>
+<body>
+            <div id="map"></div>
+                <script>
+var map;
+function initMap1() {
+    console.log("initMap1 called");
+    map = new mappls.Map('map', {
+        center: [28.61, 77.23],
+        geolocation: true,
+        zoomControl: true
+    });
+}
+</script>
+</body>
+</html>

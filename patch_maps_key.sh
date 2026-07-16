@@ -1,0 +1,1 @@
+sed -i "s/const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || 'AIzaSyAUYDwT4zKVM3LSYY_5p85eHesR7gqjQ5A';/const API_KEY = (import.meta.env \&\& import.meta.env.VITE_GOOGLE_MAPS_API_KEY) || 'AIzaSyAUYDwT4zKVM3LSYY_5p85eHesR7gqjQ5A';/" src/App.tsx

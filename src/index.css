@@ -81,7 +81,12 @@
 
 /* Google Translate Hide Fixes */
 #google_translate_element {
-  display: none;
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
 }
 .goog-te-banner-frame {
   display: none !important;
@@ -126,3 +131,30 @@ body, html {
 .VIpgJd-ZVi9od-ORHb-OEVmcd {
   display: none !important;
 }
+
+/* Custom Leaflet Marker resets */
+.custom-leaflet-marker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Haptic-like visual vibration/shake animation for emergency buttons */
+@keyframes haptic-vibrate {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-1.5px, -1px) rotate(-0.5deg); }
+  20% { transform: translate(1px, 1.5px) rotate(0.5deg); }
+  30% { transform: translate(-1px, 0.5px) rotate(-1deg); }
+  40% { transform: translate(1.5px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 1.5px) rotate(-0.5deg); }
+  60% { transform: translate(1px, -1.5px) rotate(0.5deg); }
+  70% { transform: translate(-1.5px, -1px) rotate(-1deg); }
+  80% { transform: translate(1.5px, 1px) rotate(1deg); }
+  90% { transform: translate(-0.5px, -1.5px) rotate(-0.5deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.animate-haptic-vibrate {
+  animation: haptic-vibrate 0.1s linear infinite;
+}
+

@@ -2,7 +2,8 @@
   "name": "Safe Tours",
   "description": "Smart Tourist Safety monitoring and Incident response system using AI, Geo-Fencing, and Blockchain based digital ID",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

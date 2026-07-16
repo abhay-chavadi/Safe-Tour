@@ -61,3 +61,12 @@ export interface BroadcastAlert {
   timestamp: number;
 }
 
+export interface DisasterNews {
+  id: string;
+  title: string;
+  category: string;
+  message: string;
+  timestamp: number;
+  severity: 'info' | 'warning' | 'critical';
+}
+

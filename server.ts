@@ -1,8 +1,10 @@
 import express from 'express';
+import { WebSocketServer } from 'ws';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+
 import path from 'path';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
 import { Tourist, GeoFence, BlockchainBlock } from './src/types';
 
 const app = express();
@@ -68,6 +70,34 @@ let geoFences: GeoFence[] = [
     lng: 91.8825,
     radius: 1000, // 1km
   },
+  {
+    id: 'f-5',
+    name: 'Umiam Lake Deep Water Danger Zone',
+    type: 'danger',
+    shape: 'circle',
+    lat: 25.6601,
+    lng: 91.8953,
+    radius: 900,
+  },
+  {
+    id: 'f-6',
+    name: 'Mawphlang Sacred Forest Safe Zone',
+    type: 'safe',
+    shape: 'circle',
+    lat: 25.4468,
+    lng: 91.7589,
+    radius: 1500,
+  },
+  {
+    id: 'f-7',
+    name: 'Ward\'s Lake Safe Park',
+    type: 'safe',
+    shape: 'circle',
+    lat: 25.5794,
+    lng: 91.8887,
+    radius: 500,
+  },
+
 ];
 
 const blockchain: BlockchainBlock[] = [];
@@ -201,8 +231,8 @@ app.post('/api/tourists/register', (req, res) => {
     passportId: passportId || '',
     stayDuration: stayDuration || '',
     facePhoto: facePhoto || '',
-    lat: lat || 25.5788, // Default near visitor center
-    lng: lng || 91.8933,
+    lat: lat !== undefined ? Number(lat) : 25.5788, // Default near visitor center
+    lng: lng !== undefined ? Number(lng) : 91.8933,
     lastActive: Date.now(),
     sosActive: false,
     sosTime: null,
@@ -227,15 +257,15 @@ app.post('/api/tourists/location', (req, res) => {
     return;
   }
 
-  tourist.lat = lat;
-  tourist.lng = lng;
+  tourist.lat = Number(lat);
+  tourist.lng = Number(lng);
   tourist.lastActive = Date.now();
   tourist.offlineMode = Boolean(offlineMode);
 
   // We mine a lightweight block periodically for location telemetry, e.g. every 10 updates or just update locally.
   // To keep ledger clean, we create block on state changes (entering/exiting fences or going offline).
   // Let's check status
-  broadcastToSse('LOCATION_UPDATED', { touristId, lat, lng, lastActive: tourist.lastActive, offlineMode: tourist.offlineMode });
+  broadcastToSse('LOCATION_UPDATED', { touristId, lat: tourist.lat, lng: tourist.lng, lastActive: tourist.lastActive, offlineMode: tourist.offlineMode });
   res.json({ success: true, tourist });
 });
 
@@ -372,6 +402,89 @@ app.get('/api/sse', (req, res) => {
 // 8d. Incident Reports Endpoints
 app.get('/api/reports', (req, res) => {
   res.json(incidentReports);
+});
+
+// Disaster-related safety news articles and advisories
+let disasterNews = [
+  {
+    id: 'news-1',
+    title: '🚨 ORANGE ALERT: Torrential Rainfall in Shillong',
+    category: 'Weather Warning',
+    message: 'The Meteorological Department has issued an orange alert for East Khasi Hills. Heavy to very heavy rain expected over the next 24 hours. Flash flood risks are active.',
+    timestamp: Date.now() - 15 * 60 * 1000,
+    severity: 'warning' as const
+  },
+  {
+    id: 'news-2',
+    title: '🚧 NH-6 ROAD BLOCK: Sonapur Tunnel Landslide',
+    category: 'Road & Travel',
+    message: 'A massive landslide occurred near Sonapur Tunnel, completely blocking traffic on NH-6. Rescue and clearance operations are underway. Tourists are advised to take alternative routes or delay travel.',
+    timestamp: Date.now() - 45 * 60 * 1000,
+    severity: 'critical' as const
+  },
+  {
+    id: 'news-3',
+    title: '🌊 Mawlynnong Flash Flood Caution',
+    category: 'Local Safety',
+    message: 'Rising river levels near Dawki and Mawlynnong have prompted local rangers to issue a flash flood warning. Water crossings are strictly prohibited.',
+    timestamp: Date.now() - 120 * 60 * 1000,
+    severity: 'warning' as const
+  },
+  {
+    id: 'news-4',
+    title: '📢 Central Dispatch: SDMA Earthquake Awareness Drill Today',
+    category: 'System Announcement',
+    message: 'State Disaster Management Authority is conducting a safety drill today. Please ignore any sirens near central Shillong.',
+    timestamp: Date.now() - 240 * 60 * 1000,
+    severity: 'info' as const
+  }
+];
+
+app.get('/api/disaster-news', (req, res) => {
+  res.json(disasterNews);
+});
+
+app.post('/api/disaster-news', (req, res) => {
+  const { title, message, category, severity } = req.body;
+  if (!title || !message) {
+    res.status(400).json({ error: 'Title and message are required.' });
+    return;
+  }
+  const newArticle = {
+    id: `news-${Date.now()}`,
+    title,
+    message,
+    category: category || 'General Safety',
+    severity: severity || 'warning',
+    timestamp: Date.now()
+  };
+  disasterNews.unshift(newArticle);
+  
+  // Register in blockchain for permanent, unalterable proof
+  mineBlock('SYSTEM', `Published Safety Advisory: "${title}" [Category: ${newArticle.category}]`);
+  
+  // Broadcast to SSE so clients get it in real-time
+  broadcastToSse('NEWS_UPDATED', disasterNews);
+  
+  res.status(201).json(newArticle);
+});
+
+app.delete('/api/disaster-news/:id', (req, res) => {
+  const { id } = req.params;
+  const index = disasterNews.findIndex(n => n.id === id);
+  if (index === -1) {
+    res.status(404).json({ error: 'News advisory not found.' });
+    return;
+  }
+  const removed = disasterNews[index];
+  disasterNews.splice(index, 1);
+  
+  // Register in blockchain
+  mineBlock('SYSTEM', `Archived Safety Advisory: "${removed.title}"`);
+  
+  // Broadcast to SSE
+  broadcastToSse('NEWS_UPDATED', disasterNews);
+  res.json({ success: true, removed });
 });
 
 app.post('/api/reports', (req, res) => {
@@ -562,7 +675,72 @@ app.delete('/api/tourists/:id', (req, res) => {
   res.json({ success: true, id });
 });
 
+// POST to logout / de-register all tourists
+app.post('/api/tourists/logout-all', (req, res) => {
+  const count = tourists.size;
+  tourists.clear();
+  mineBlock('SYSTEM', `Bulk Checkout: All active tourist sessions (${count}) have been logged out and cleared.`);
+  broadcastToSse('TOURISTS_CLEARED', {});
+  res.json({ success: true, clearedCount: count });
+});
+
 // Start server
+
+function setupWebSocket(server: any) {
+  const wss = new WebSocketServer({ server, path: '/live' });
+
+  wss.on("connection", async (clientWs) => {
+    try {
+      const client = getGeminiClient();
+      if (!client) {
+        console.error("Gemini API Key is missing. Live audio session cannot start.");
+        clientWs.send(JSON.stringify({ error: "Gemini API Key is required but not configured." }));
+        clientWs.close();
+        return;
+      }
+      const session = await client.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: "You are a helpful tour guide for Shillong and Meghalaya. Provide concise, friendly suggestions for places to visit, weather updates, and safety tips. Focus on keeping tourists safe and informed.",
+          tools: [{ googleSearch: {} }],
+        },
+        callbacks: {
+          onmessage: (message) => {
+            const audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (audio) clientWs.send(JSON.stringify({ audio }));
+            if (message.serverContent?.interrupted)
+              clientWs.send(JSON.stringify({ interrupted: true }));
+          },
+        },
+      });
+
+      clientWs.on("message", (data) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (parsed.audio) {
+            session.sendRealtimeInput({
+              audio: { data: parsed.audio, mimeType: "audio/pcm;rate=16000" },
+            });
+          }
+        } catch (e) {
+          console.error("Live API WS message error:", e);
+        }
+      });
+      
+      clientWs.on("close", () => {
+        // clean up
+      });
+    } catch (err) {
+      console.error("Failed to start Live session", err);
+      clientWs.close();
+    }
+  });
+}
+
 async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -578,9 +756,12 @@ async function start() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Safe Tour] Server running at http://localhost:${PORT}`);
   });
+
+  setupWebSocket(server);
+
 }
 
 start();

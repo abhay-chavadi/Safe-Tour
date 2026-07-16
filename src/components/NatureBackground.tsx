@@ -110,34 +110,60 @@ export default function NatureBackground() {
   }, [isPlaying]);
 
   return (
-    <div className="absolute inset-0 overflow-hidden -z-10 bg-[#0d1b1e]">
-      {/* Sleek Interface Forest Spotlight */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,#2d5a27_0%,transparent_70%)]" />
+    <div className="absolute inset-0 overflow-hidden -z-10 bg-gradient-to-br from-teal-200 via-sky-200 to-rose-200 animate-[gradient_20s_infinite_alternate]">
+      {/* Sleek Interface Forest Spotlight (Colorful multi-spotlight gradient overlay) */}
+      <div className="absolute inset-0 opacity-40 pointer-events-none bg-[radial-gradient(circle_at_20%_30%,#10b981_0%,transparent_60%),radial-gradient(circle_at_80%_70%,#0ea5e9_0%,transparent_60%),radial-gradient(circle_at_50%_10%,#f59e0b_0%,transparent_70%),radial-gradient(circle_at_90%_20%,#ec4899_0%,transparent_50%)]" />
 
-      {/* Cinematic Nature Image with Ken Burns panning effect */}
+      {/* Cinematic Nature Image with Ken Burns panning effect (Saturated & Sizable Opacity for visual richness) */}
       <div 
-        className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1426604966848-d7adac402bff?q=80&w=1920')] bg-cover bg-center opacity-35 scale-105 animate-[kenburns_120s_infinite_alternate] pointer-events-none"
+        className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1920')] bg-cover bg-center opacity-30 scale-105 animate-[kenburns_120s_infinite_alternate] pointer-events-none"
         style={{
-          filter: 'brightness(0.22) contrast(1.15) saturate(0.8)',
+          filter: 'brightness(1.05) contrast(1.1) saturate(1.85) grayscale(0%)',
         }}
       />
 
-      {/* Subtle Mist/Atmosphere Overlay overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0d1b1e] via-[#0d1b1e]/40 to-[#0d1b1e] pointer-events-none" />
+      {/* Subtle Mist/Atmosphere Overlay overlay (Fades to colorful vibrant wash) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#f0f9ff]/85 via-[#f0fdf4]/75 to-transparent pointer-events-none" />
 
-      {/* Floating Animated Dust Particles (CSS simulated) */}
-      <div className="absolute inset-0 pointer-events-none opacity-20">
-        <div className="absolute top-[20%] left-[30%] w-1.5 h-1.5 bg-emerald-400 rounded-full blur-[1px] animate-[float_15s_infinite]" />
-        <div className="absolute top-[60%] left-[10%] w-2 h-2 bg-amber-400/80 rounded-full blur-[2px] animate-[float_22s_infinite]" />
-        <div className="absolute top-[40%] left-[80%] w-1 h-1 bg-emerald-300 rounded-full blur-[1px] animate-[float_18s_infinite]" />
-        <div className="absolute top-[80%] left-[70%] w-2 h-2 bg-emerald-500/50 rounded-full blur-[3px] animate-[float_25s_infinite]" />
+      {/* Intense Colorful God Rays */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/15 via-sky-500/10 to-amber-500/20 mix-blend-color-burn pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
+      <div className="absolute top-0 left-1/4 w-full h-[150%] bg-gradient-to-b from-teal-500/15 via-transparent to-transparent -rotate-45 transform origin-top-left pointer-events-none mix-blend-overlay" />
+      
+      {/* Floating Animated Fireflies/Particles (styled beautifully with multiple vibrant colors) */}
+      <div className="absolute inset-0 pointer-events-none">
+        {Array.from({ length: 22 }).map((_, i) => {
+          const colors = ['bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-pink-400'];
+          const shadowColors = [
+            'rgba(16, 185, 129, 0.7)',
+            'rgba(245, 158, 11, 0.7)',
+            'rgba(14, 165, 233, 0.7)',
+            'rgba(236, 72, 153, 0.7)'
+          ];
+          const colorIdx = i % colors.length;
+          return (
+            <div 
+              key={i} 
+              className={`absolute ${colors[colorIdx]} rounded-full blur-[1px]`}
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                width: `${Math.random() * 3.5 + 3.5}px`,
+                height: `${Math.random() * 3.5 + 3.5}px`,
+                animation: `float ${Math.random() * 12 + 12}s infinite alternate ease-in-out`,
+                animationDelay: `${Math.random() * 6}s`,
+                boxShadow: `0 0 12px 3px ${shadowColors[colorIdx]}`
+              }}
+            />
+          );
+        })}
       </div>
 
-      {/* Cinematic Ambient Sound Toggle */}
+
+      {/* Cinematic Ambient Sound Toggle (Light Mode Styled) */}
       <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
         <button
           onClick={() => setIsPlaying(!isPlaying)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono font-medium border border-emerald-500/30 bg-stone-900/80 hover:bg-emerald-950/40 hover:border-emerald-500/60 text-emerald-400 transition-all cursor-pointer backdrop-blur-md shadow-lg shadow-black/40"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono font-medium border border-emerald-200 bg-white/90 hover:bg-emerald-50 hover:border-emerald-300 text-emerald-600 transition-all cursor-pointer backdrop-blur-md shadow-sm"
           id="nature-sound-toggle"
         >
           {isPlaying ? (
@@ -147,15 +173,15 @@ export default function NatureBackground() {
             </>
           ) : (
             <>
-              <VolumeX className="w-3.5 h-3.5 text-stone-500" />
-              <span className="text-stone-400">SOUNDSCAPE: OFF</span>
+              <VolumeX className="w-3.5 h-3.5 text-stone-400" />
+              <span className="text-stone-500">SOUNDSCAPE: OFF</span>
             </>
           )}
         </button>
       </div>
 
       {/* Cinematic Grid Lines Overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
     </div>
   );
 }
